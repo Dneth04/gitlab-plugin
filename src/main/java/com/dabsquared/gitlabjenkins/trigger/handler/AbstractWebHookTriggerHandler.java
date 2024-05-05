@@ -16,19 +16,18 @@ import hudson.model.Job;
 import hudson.plugins.git.GitSCM;
 import hudson.plugins.git.RevisionParameterAction;
 import hudson.scm.SCM;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.ws.rs.ProcessingException;
+import javax.ws.rs.WebApplicationException;
 import jenkins.model.ParameterizedJobMixIn;
 import jenkins.triggers.SCMTriggerItem;
 import net.karneim.pojobuilder.GeneratePojoBuilder;
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.jgit.transport.URIish;
 import org.jenkinsci.plugins.displayurlapi.DisplayURLProvider;
-
-import javax.ws.rs.ProcessingException;
-import javax.ws.rs.WebApplicationException;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * @author Robin Müller
@@ -39,7 +38,12 @@ public abstract class AbstractWebHookTriggerHandler<H extends WebHook> implement
     protected PendingBuildsHandler pendingBuildsHandler = new PendingBuildsHandler();
 
     @Override
-    public void handle(Job<?, ?> job, H hook, boolean ciSkip, BranchFilter branchFilter, MergeRequestLabelFilter mergeRequestLabelFilter) {
+    public void handle(
+            Job<?, ?> job,
+            H hook,
+            boolean ciSkip,
+            BranchFilter branchFilter,
+            MergeRequestLabelFilter mergeRequestLabelFilter) {
         if (ciSkip && isCiSkip(hook)) {
             LOGGER.log(Level.INFO, "Skipping due to ci-skip.");
             return;
@@ -53,7 +57,9 @@ public abstract class AbstractWebHookTriggerHandler<H extends WebHook> implement
             setCommitStatusPendingIfNecessary(job, hook);
             scheduleBuild(job, createActions(job, hook));
         } else {
-            LOGGER.log(Level.INFO, "Source branch {0} or target branch {1} is not allowed", new Object[]{sourceBranch, targetBranch});
+            LOGGER.log(Level.INFO, "Source branch {0} or target branch {1} is not allowed", new Object[] {
+                sourceBranch, targetBranch
+            });
         }
     }
 
@@ -65,19 +71,30 @@ public abstract class AbstractWebHookTriggerHandler<H extends WebHook> implement
         try {
             String buildName = PendingBuildsHandler.resolvePendingBuildName(job);
             if (StringUtils.isNotBlank(buildName)) {
-                GitLabClient client = job.getProperty(GitLabConnectionProperty.class).getClient();
-                BuildStatusUpdate buildStatusUpdate = retrieveBuildStatusUpdate(hook);
-                try {
-                    if (client == null) {
-                        LOGGER.log(Level.SEVERE, "No GitLab connection configured");
+                GitLabConnectionProperty connectionProperty = job.getProperty(GitLabConnectionProperty.class);
+                if (connectionProperty != null) {
+                    GitLabClient client = connectionProperty.getClient();
+                    if (client != null) {
+                        BuildStatusUpdate buildStatusUpdate = retrieveBuildStatusUpdate(hook);
+                        try {
+                            String ref = StringUtils.removeStart(buildStatusUpdate.getRef(), "refs/tags/");
+                            String targetUrl = DisplayURLProvider.get().getJobURL(job);
+                            client.changeBuildStatus(
+                                    buildStatusUpdate.getProjectId(),
+                                    buildStatusUpdate.getSha(),
+                                    BuildState.pending,
+                                    ref,
+                                    buildName,
+                                    targetUrl,
+                                    BuildState.pending.name());
+                        } catch (WebApplicationException | ProcessingException e) {
+                            LOGGER.log(Level.SEVERE, "Failed to set build state to pending", e);
+                        }
                     } else {
-                        String ref = StringUtils.removeStart(buildStatusUpdate.getRef(), "refs/tags/");
-                        String targetUrl = DisplayURLProvider.get().getJobURL(job);
-                        client.changeBuildStatus(buildStatusUpdate.getProjectId(), buildStatusUpdate.getSha(),
-                                BuildState.pending, ref, buildName, targetUrl, BuildState.pending.name());
+                        LOGGER.log(Level.WARNING, "GitLabClient is null");
                     }
-                } catch (WebApplicationException | ProcessingException e) {
-                    LOGGER.log(Level.SEVERE, "Failed to set build state to pending", e);
+                } else {
+                    LOGGER.log(Level.WARNING, "GitLabConnectionProperty is null");
                 }
             }
         } catch (NullPointerException e) {
@@ -93,8 +110,10 @@ public abstract class AbstractWebHookTriggerHandler<H extends WebHook> implement
             GitSCM gitSCM = getGitSCM(item);
             actions.add(createRevisionParameter(hook, gitSCM));
         } catch (NoRevisionToBuildException e) {
-            LOGGER.log(Level.WARNING, "unknown handled situation, dont know what revision to build for req {0} for job {1}",
-                    new Object[]{hook, (job != null ? job.getFullName() : null)});
+            LOGGER.log(
+                    Level.WARNING,
+                    "unknown handled situation, dont know what revision to build for req {0} for job {1}",
+                    new Object[] {hook, (job != null ? job.getFullName() : null)});
         }
         return actions.toArray(new Action[actions.size()]);
     }
@@ -107,7 +126,8 @@ public abstract class AbstractWebHookTriggerHandler<H extends WebHook> implement
 
     protected abstract String getTargetBranch(H hook);
 
-    protected abstract RevisionParameterAction createRevisionParameter(H hook, GitSCM gitSCM) throws NoRevisionToBuildException;
+    protected abstract RevisionParameterAction createRevisionParameter(H hook, GitSCM gitSCM)
+            throws NoRevisionToBuildException;
 
     protected abstract BuildStatusUpdate retrieveBuildStatusUpdate(H hook);
 

@@ -34,8 +34,8 @@
   - [Cancel pending builds on merge request update](#cancel-pending-builds-on-merge-request-update)
 - [Compatibility](#compatibility)
 - [Contributing to the Plugin](#contributing-to-the-plugin)
-- [Testing With Docker](#testing-with-docker)
-- [Release Workflow](#release-workflow)
+- [Testing With Docker](src/docker/README.md#quick-test-environment-setup-using-docker-for-linuxamd64)
+- [Release Workflow](CONTRIBUTING.md#release-workflow)
 - [Changelog](#changelog)
 
 ## Introduction
@@ -47,10 +47,10 @@ This plugin allows GitLab to trigger builds in Jenkins when code is committed or
 This plugin is Open Source Software, developed on a volunteer basis by users of Jenkins and GitLab. It is not formally supported by either GitLab Inc. or CloudBees Inc.
 
 #### Supported GitLab versions
-GitLab performs a new major release about every six to nine months, and they are constantly fixing bugs and adding new features. As a result, we cannot support this plugin when used with GitLab versions older than N-2, where N is the current major release. At the time of this writing, the current stable release of GitLab is 11.1, so the oldest release supported by this plugin is 9.0.
+GitLab performs a new major release about every six to nine months, and they are constantly fixing bugs and adding new features. As a result, we cannot support this plugin when used with GitLab versions older than N-2, where N is the [current major release](https://about.gitlab.com/releases/categories/releases/).
 
 #### Getting help
-If you have a problem or question about using the plugin, please make sure you are using the latest version. Then create an issue in the GitHub project.
+If you have a problem or question about using the plugin, please make sure you are using the latest version. Then create an issue in the [GitHub project](https://github.com/jenkinsci/gitlab-plugin/issues/new/choose).
 
 To enable debug logging in the plugin:
 
@@ -63,12 +63,7 @@ To enable debug logging in the plugin:
 
 ## Known bugs/issues
 
-This is not an exhaustive list of issues, but rather a place for us to note significant bugs that may impact your use of the plugin in certain circumstances. For most things, please search the [Issues](https://github.com/jenkinsci/gitlab-plugin/issues) section and open a new one if you don't find anything.
-* [#272](https://github.com/jenkinsci/gitlab-plugin/issues/272) - Plugin version 1.2.0+ does not work with GitLab Enterprise Edition < 8.8.3. Subsequent versions work fine.
-* Jenkins versions 1.651.2 and 2.3 removed the ability of plugins to set arbitrary job parameters that are not specifically defined in each job's configuration. This was an important security update, but it has broken compatibility with some plugins, including ours. See [here](https://jenkins.io/blog/2016/05/11/security-update/) for more information and workarounds if you are finding parameters unset or empty that you expect to have values.
-* [#473](https://github.com/jenkinsci/gitlab-plugin/issues/473) - When upgrading from plugin versions older than 1.2.0, you must upgrade to that version first, and then to the latest version. Otherwise, you will get a NullPointerException in com.cloudbees.plugins.credentials.matchers.IdMatcher after you upgrade. See the linked issue for specific instructions.
-* [#608](https://github.com/jenkinsci/gitlab-plugin/issues/608) - GitLab 9.5.0 - 9.5.4 has a bug that causes the "Test Webhook" function to fail when it sends a test to Jenkins. This was fixed in 9.5.5.
-* [#730](https://github.com/jenkinsci/gitlab-plugin/issues/730) - GitLab 10.5.6 introduced an issue which can cause HTTP 500 errors when webhooks are triggered if the webhook is pointing to http://localhost or http://127.0.0.1. See the linked issue for a workaround.
+The plugin tracks current issues with the [GitHub issue tracker](https://github.com/jenkinsci/gitlab-plugin/issues).  Some issues are reported in the [Jenkins Jira issue tracker](https://issues.jenkins.io/issues/?jql=component%3D19326). When searching for existng issues, please check both locations.
 
 ## Report an Issue
 
@@ -91,6 +86,7 @@ gitlabSourceNamespace
 gitlabSourceRepoURL
 gitlabSourceRepoSshUrl
 gitlabSourceRepoHttpUrl
+gitlabMergeCommitSha
 gitlabMergeRequestTitle
 gitlabMergeRequestDescription
 gitlabMergeRequestId
@@ -114,7 +110,7 @@ gitlabTriggerPhrase
 
 ## Global plugin configuration
 ### GitLab-to-Jenkins authentication
-By default the plugin will require authentication to be set up for the connection from GitLab to Jenkins, in order to prevent unauthorized persons from being able to trigger jobs.
+The plugin requires authentication to connect from GitLab to Jenkins. This prevents unauthorized persons from triggering jobs.
 
 #### Authentication Security
 
@@ -125,7 +121,7 @@ APITOKENS and other secrets MUST not be send over unsecure connections. So, all 
 #### Configuring global authentication
 1. Create a user in Jenkins which has, at a minimum, Job/Build permissions
 2. Log in as that user (this is required even if you are a Jenkins admin user), then click on the user's name in the top right corner of the page
-3. Click 'Configure,' then 'Show API Token...', and note/copy the User ID and API Token
+3. Click 'Configure,' then 'Add new Token', and note/copy the User ID and API Token
 4. In GitLab, when you create webhooks to trigger Jenkins jobs, use this format for the URL and do not enter anything for 'Secret Token': `https://USERID:APITOKEN@JENKINS_URL/project/YOUR_JOB`
 5. After you add the webhook, click the 'Test' button, and it should succeed
 
@@ -291,6 +287,22 @@ properties([
             branchFilterType: "NameBasedFilter",
             includeBranchesSpec: "release/qat",
             excludeBranchesSpec: "",
+            triggerOnBranchDeleteRequest: true,
+            triggerOnlyIfNewCommitsPushed: false,
+            triggerOnPipelineEvent: false,
+            triggerOnAcceptedMergeRequest: true,
+            triggerOnClosedMergeRequest: false,
+            triggerOnApprovedMergeRequest: false,
+            labelsThatForcesBuildIfAdded: "",
+            branchFilterName: "",
+            sourceBranchRegex: "",
+            targetBranchRegex: '^(.*/)?main$',
+            mergeRequestLabelFilterConfig: [
+                include: "",
+                exclude: ""
+            ],
+            pendingBuildName: "jenkins",
+            cancelPendingBuildsOnUpdate: true
         ]
     ])
 ])
@@ -349,7 +361,7 @@ Also make sure you have chosen the appropriate GitLab instance from the 'GitLab 
         }
     }
     ```
-* Or use the `updateGitlabCommitStatus` step to use a custom value for updating the commit status. You could use try/catch blocks or other logic to send fine-grained status of the build to GitLab. Valid statuses are defined by GitLab and documented here: https://docs.gitlab.com/ee/api/commits.html#post-the-build-status-to-a-commit
+* Or use the `updateGitlabCommitStatus` step to use a custom value for updating the commit status. You could use try/catch blocks or other logic to send fine-grained status of the build to GitLab. Valid statuses are defined by GitLab and documented [here](https://docs.gitlab.com/ee/api/commits.html#set-the-pipeline-status-of-a-commit).
     ```groovy
     node() {
         stage('Checkout') { checkout <your-scm-config> }
@@ -455,7 +467,19 @@ triggers {
       excludeBranchesSpec: "",
       pendingBuildName: "Jenkins",
       cancelPendingBuildsOnUpdate: false,
-      secretToken: "abcdefghijklmnopqrstuvwxyz0123456789ABCDEF")
+      secretToken: "abcdefghijklmnopqrstuvwxyz0123456789ABCDEF",
+      triggerToBranchDeleteRequest: false,
+      triggerOnlyIfNewCommitsPushed: false,
+      triggerOnPipelineEvent: false,
+      triggerOnAcceptedMergeRequest: true,
+      triggerOnClosedMergeRequest: false,
+      triggerOnApprovedMergeRequest: false,
+      labelsThatForcesBuildIfAdded: "",
+      branchFilterName: "",
+      sourceBranchRegex: "",
+      targetBranchRegex: '^(.*/)?main$',
+      mergeRequestLabelFilterConfig: [include: "", exclude: ""]
+    )
 }
 ```
 
@@ -476,13 +500,35 @@ This plugin can be used with Matrix/Multi-configuration jobs together with the [
           4. Add GitLab actions as required
 
 ### See also
--   [Violation Comments to GitLab
-    Plugin](https://wiki.jenkins.io/display/JENKINS/Violation+Comments+to+GitLab+Plugin) for
-    pipeline and job DSL examples.
+-   [Violation Comments to GitLab Plugin](https://plugins.jenkins.io/violation-comments-to-gitlab/) for pipeline and job DSL examples.
 
 ## Advanced features
 ### Branch filtering
-Triggers may be filtered based on the branch name, i.e. the build will only be allowed for selected branches. On the project configuration page, when you configure the GitLab trigger, you can choose 'Filter branches by name' or 'Filter branches by regex.' Filter by name takes comma-separated lists of branch names to include and/or exclude from triggering a build. Filter by regex takes a Java regular expression to include and/or exclude.
+Triggers may be filtered based on the branch name, i.e. the build will only be allowed for selected branches. On the project configuration page, when you configure the GitLab trigger, you can choose 'Filter branches by name' or 'Filter branches by regex.' Filter by name takes comma-separated lists of branch names to include and/or exclude from triggering a build. Filter by regex takes a Java regular expression to include and/or exclude. For example, to exclude all branches containing the word "feature", you can use the following regular expression: `^(?:(?!feature).)*$`.
+On a similar note, the regular expression `^(?!.*master).*$` will mean - all branches not matching master. This is a regular expression that uses negative lookahead to match any string that does not contain the word "master". Here's a breakdown of how it works:
+
+    ^: Anchors the match to the beginning of the string.
+    (: Starts a group that will be used for the negative lookahead.
+    ?!: Indicates a negative lookahead assertion - finds all that does not match.
+    .*: Matches any number of characters (except for a newline) zero or more times.
+    master: should not match master.
+    ): Ends the group.
+    $: Anchors the match to the end of the string.
+    
+Keep in mind that the `RegexBasedFilter` feature is case-sensitive by default. If you want to make it case-insensitive, you can use the `(?i)` flag at the beginning of your regular expression pattern. For example: `^(?i)(?:(?!feature).)*$`.
+    
+Here is an example pipeline script that shows how to use the `RegexBasedFilter` feature in the GitLab trigger:
+
+```
+triggers {
+    gitlab(
+        triggerOnPush: true, 
+        triggerOnMergeRequest: false, 
+        branchFilterType: "RegexBasedFilter", 
+        targetBranchRegex: '^(?:(?!feature).)*$'
+    )
+}
+```
 
 **Note:** This functionality requires access to GitLab and a git repository url already saved in the project configuration. In other words, when creating a new project, the configuration needs to be saved *once* before being able to add branch filters. For Pipeline jobs, the configuration must be saved *and* the job must be run once before the list is populated.
 

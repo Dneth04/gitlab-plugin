@@ -1,5 +1,10 @@
 package com.dabsquared.gitlabjenkins;
 
+import static com.dabsquared.gitlabjenkins.trigger.filter.BranchFilterConfig.BranchFilterConfigBuilder.branchFilterConfig;
+import static com.dabsquared.gitlabjenkins.trigger.handler.merge.MergeRequestHookTriggerHandlerFactory.newMergeRequestHookTriggerHandler;
+import static com.dabsquared.gitlabjenkins.trigger.handler.note.NoteHookTriggerHandlerFactory.newNoteHookTriggerHandler;
+import static com.dabsquared.gitlabjenkins.trigger.handler.pipeline.PipelineHookTriggerHandlerFactory.newPipelineHookTriggerHandler;
+import static com.dabsquared.gitlabjenkins.trigger.handler.push.PushHookTriggerHandlerFactory.newPushHookTriggerHandler;
 
 import com.dabsquared.gitlabjenkins.connection.GitLabConnection;
 import com.dabsquared.gitlabjenkins.connection.GitLabConnectionConfig;
@@ -26,6 +31,7 @@ import com.dabsquared.gitlabjenkins.trigger.handler.pipeline.PipelineHookTrigger
 import com.dabsquared.gitlabjenkins.trigger.handler.push.PushHookTriggerHandler;
 import com.dabsquared.gitlabjenkins.trigger.label.ProjectLabelsProvider;
 import com.dabsquared.gitlabjenkins.webhook.GitLabWebHook;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
 import hudson.Util;
 import hudson.init.InitMilestone;
@@ -41,6 +47,11 @@ import hudson.util.ListBoxModel;
 import hudson.util.ListBoxModel.Option;
 import hudson.util.Secret;
 import hudson.util.SequentialExecutionQueue;
+import java.io.IOException;
+import java.io.ObjectStreamException;
+import java.security.SecureRandom;
+import java.util.Collection;
+import java.util.Objects;
 import jenkins.model.Jenkins;
 import jenkins.model.ParameterizedJobMixIn;
 import jenkins.triggers.SCMTriggerItem.SCMTriggerItems;
@@ -56,18 +67,6 @@ import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
-
-import java.io.IOException;
-import java.io.ObjectStreamException;
-import java.security.SecureRandom;
-import java.util.Collection;
-
-import static com.dabsquared.gitlabjenkins.trigger.filter.BranchFilterConfig.BranchFilterConfigBuilder.branchFilterConfig;
-import static com.dabsquared.gitlabjenkins.trigger.handler.merge.MergeRequestHookTriggerHandlerFactory.newMergeRequestHookTriggerHandler;
-import static com.dabsquared.gitlabjenkins.trigger.handler.note.NoteHookTriggerHandlerFactory.newNoteHookTriggerHandler;
-import static com.dabsquared.gitlabjenkins.trigger.handler.pipeline.PipelineHookTriggerHandlerFactory.newPipelineHookTriggerHandler;
-import static com.dabsquared.gitlabjenkins.trigger.handler.push.PushHookTriggerHandlerFactory.newPushHookTriggerHandler;
-
 
 /**
  * Triggers a build when we receive a GitLab WebHook.
@@ -96,7 +95,10 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
     private transient boolean addNoteOnMergeRequest;
     private transient boolean addCiMessage;
     private transient boolean addVoteOnMergeRequest;
+
+    @SuppressFBWarnings(value = "URF_UNREAD_FIELD", justification = "API compatibility")
     private transient boolean allowAllBranches = false;
+
     private transient String branchFilterName;
     private BranchFilterType branchFilterType;
     private String includeBranchesSpec;
@@ -121,14 +123,35 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
      */
     @Deprecated
     @GeneratePojoBuilder(intoPackage = "*.builder.generated", withFactoryMethod = "*")
-    public GitLabPushTrigger(boolean triggerOnPush, boolean triggerToBranchDeleteRequest, boolean triggerOnMergeRequest, boolean triggerOnlyIfNewCommitsPushed, boolean triggerOnAcceptedMergeRequest, boolean triggerOnClosedMergeRequest,
-    						 TriggerOpenMergeRequest triggerOpenMergeRequestOnPush, boolean triggerOnNoteRequest, String noteRegex,
-                             boolean skipWorkInProgressMergeRequest, boolean ciSkip, String labelsThatForcesBuildIfAdded,
-                             boolean setBuildDescription, boolean addNoteOnMergeRequest, boolean addCiMessage, boolean addVoteOnMergeRequest,
-                             boolean acceptMergeRequestOnSuccess, BranchFilterType branchFilterType,
-                             String includeBranchesSpec, String excludeBranchesSpec, String sourceBranchRegex, String targetBranchRegex,
-                             MergeRequestLabelFilterConfig mergeRequestLabelFilterConfig, String secretToken, boolean triggerOnPipelineEvent,
-                             boolean triggerOnApprovedMergeRequest, String pendingBuildName, boolean cancelPendingBuildsOnUpdate) {
+    public GitLabPushTrigger(
+            boolean triggerOnPush,
+            boolean triggerToBranchDeleteRequest,
+            boolean triggerOnMergeRequest,
+            boolean triggerOnlyIfNewCommitsPushed,
+            boolean triggerOnAcceptedMergeRequest,
+            boolean triggerOnClosedMergeRequest,
+            TriggerOpenMergeRequest triggerOpenMergeRequestOnPush,
+            boolean triggerOnNoteRequest,
+            String noteRegex,
+            boolean skipWorkInProgressMergeRequest,
+            boolean ciSkip,
+            String labelsThatForcesBuildIfAdded,
+            boolean setBuildDescription,
+            boolean addNoteOnMergeRequest,
+            boolean addCiMessage,
+            boolean addVoteOnMergeRequest,
+            boolean acceptMergeRequestOnSuccess,
+            BranchFilterType branchFilterType,
+            String includeBranchesSpec,
+            String excludeBranchesSpec,
+            String sourceBranchRegex,
+            String targetBranchRegex,
+            MergeRequestLabelFilterConfig mergeRequestLabelFilterConfig,
+            String secretToken,
+            boolean triggerOnPipelineEvent,
+            boolean triggerOnApprovedMergeRequest,
+            String pendingBuildName,
+            boolean cancelPendingBuildsOnUpdate) {
         this.triggerOnPush = triggerOnPush;
         this.triggerToBranchDeleteRequest = triggerToBranchDeleteRequest;
         this.triggerOnMergeRequest = triggerOnMergeRequest;
@@ -164,21 +187,24 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
     }
 
     @DataBoundConstructor
-    public GitLabPushTrigger() { }
+    public GitLabPushTrigger() {}
 
     @Initializer(after = InitMilestone.JOB_LOADED)
     public static void migrateJobs() throws IOException {
         GitLabPushTrigger.DescriptorImpl oldConfig = Trigger.all().get(GitLabPushTrigger.DescriptorImpl.class);
-        if (!oldConfig.jobsMigrated) {
-            GitLabConnectionConfig gitLabConfig = (GitLabConnectionConfig) Jenkins.getInstance().getDescriptor(GitLabConnectionConfig.class);
-            gitLabConfig.getConnections().add(new GitLabConnection(
-                oldConfig.gitlabHostUrl,
-                    oldConfig.gitlabHostUrl,
-                    oldConfig.gitlabApiToken,
-                "autodetect",
-                    oldConfig.ignoreCertificateErrors,
-                    10,
-                    10));
+        if (oldConfig != null && !oldConfig.jobsMigrated) {
+            GitLabConnectionConfig gitLabConfig = (GitLabConnectionConfig)
+                    Objects.requireNonNull(Jenkins.getInstance()).getDescriptor(GitLabConnectionConfig.class);
+            Objects.requireNonNull(gitLabConfig)
+                    .getConnections()
+                    .add(new GitLabConnection(
+                            oldConfig.gitlabHostUrl,
+                            oldConfig.gitlabHostUrl,
+                            oldConfig.gitlabApiToken,
+                            "autodetect",
+                            oldConfig.ignoreCertificateErrors,
+                            10,
+                            10));
 
             String defaultConnectionName = gitLabConfig.getConnections().get(0).getName();
             for (AbstractProject<?, ?> project : Jenkins.getInstance().getAllItems(AbstractProject.class)) {
@@ -195,8 +221,9 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
             oldConfig.jobsMigrated = true;
             oldConfig.save();
         }
-        if (!oldConfig.jobsMigrated2) {
-            for (AbstractProject<?, ?> project : Jenkins.getInstance().getAllItems(AbstractProject.class)) {
+        if (oldConfig != null && !oldConfig.jobsMigrated2) {
+            for (AbstractProject<?, ?> project :
+                    Objects.requireNonNull(Jenkins.getInstance()).getAllItems(AbstractProject.class)) {
                 GitLabPushTrigger trigger = project.getTrigger(GitLabPushTrigger.class);
                 if (trigger != null) {
                     if (trigger.addNoteOnMergeRequest) {
@@ -241,9 +268,9 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
 
     @Override
     public boolean isTriggerOnApprovedMergeRequest() {
-		return triggerOnApprovedMergeRequest;
-	}    
-    
+        return triggerOnApprovedMergeRequest;
+    }
+
     @Override
     public boolean isTriggerOnClosedMergeRequest() {
         return triggerOnClosedMergeRequest;
@@ -253,7 +280,9 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
         return triggerOnNoteRequest;
     }
 
-    public boolean getTriggerOnPipelineEvent() { return triggerOnPipelineEvent; }
+    public boolean getTriggerOnPipelineEvent() {
+        return triggerOnPipelineEvent;
+    }
 
     public String getNoteRegex() {
         return this.noteRegex == null ? "" : this.noteRegex;
@@ -328,7 +357,7 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
     public void setTriggerToBranchDeleteRequest(boolean triggerToBranchDeleteRequest) {
         this.triggerToBranchDeleteRequest = triggerToBranchDeleteRequest;
     }
-    
+
     @DataBoundSetter
     public void setTriggerOnApprovedMergeRequest(boolean triggerOnApprovedMergeRequest) {
         this.triggerOnApprovedMergeRequest = triggerOnApprovedMergeRequest;
@@ -449,6 +478,30 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
         this.acceptMergeRequestOnSuccess = acceptMergeRequestOnSuccess;
     }
 
+    public boolean getAcceptMergeRequestOnSuccess() {
+        return this.acceptMergeRequestOnSuccess;
+    }
+
+    public boolean getAddCiMessage() {
+        return this.addCiMessage;
+    }
+
+    public boolean getAddNoteOnMergeRequest() {
+        return this.addNoteOnMergeRequest;
+    }
+
+    public boolean getAddVoteOnMergeRequest() {
+        return this.addVoteOnMergeRequest;
+    }
+
+    public boolean getSkipWorkInProgressMergeRequest() {
+        return this.skipWorkInProgressMergeRequest;
+    }
+
+    public String getBranchFilterName() {
+        return this.branchFilterName;
+    }
+
     @DataBoundSetter
     public void setTriggerOnPipelineEvent(boolean triggerOnPipelineEvent) {
         this.triggerOnPipelineEvent = triggerOnPipelineEvent;
@@ -518,9 +571,13 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
     }
 
     private void initializeTriggerHandler() {
-		mergeRequestHookTriggerHandler = newMergeRequestHookTriggerHandler(this);
+        mergeRequestHookTriggerHandler = newMergeRequestHookTriggerHandler(this);
         noteHookTriggerHandler = newNoteHookTriggerHandler(triggerOnNoteRequest, noteRegex);
-        pushHookTriggerHandler = newPushHookTriggerHandler(triggerOnPush,triggerToBranchDeleteRequest, triggerOpenMergeRequestOnPush, skipWorkInProgressMergeRequest);
+        pushHookTriggerHandler = newPushHookTriggerHandler(
+                triggerOnPush,
+                triggerToBranchDeleteRequest,
+                triggerOpenMergeRequestOnPush,
+                skipWorkInProgressMergeRequest);
         pipelineTriggerHandler = newPipelineHookTriggerHandler(triggerOnPipelineEvent);
     }
 
@@ -534,13 +591,16 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
     }
 
     private void initializeMergeRequestLabelFilter() {
-        mergeRequestLabelFilter = MergeRequestLabelFilterFactory.newMergeRequestLabelFilter(mergeRequestLabelFilterConfig);
+        mergeRequestLabelFilter =
+                MergeRequestLabelFilterFactory.newMergeRequestLabelFilter(mergeRequestLabelFilterConfig);
     }
 
     @Override
     protected Object readResolve() throws ObjectStreamException {
         if (branchFilterType == null) {
-            branchFilterType = StringUtils.isNotBlank(branchFilterName) ? BranchFilterType.valueOf(branchFilterName) : BranchFilterType.All;
+            branchFilterType = StringUtils.isNotBlank(branchFilterName)
+                    ? BranchFilterType.valueOf(branchFilterName)
+                    : BranchFilterType.All;
         }
         initializeTriggerHandler();
         initializeBranchFilter();
@@ -566,10 +626,14 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
     @Symbol("gitlab")
     public static class DescriptorImpl extends TriggerDescriptor {
 
-        private transient final SequentialExecutionQueue queue = new SequentialExecutionQueue(Jenkins.MasterComputer.threadPoolForRemoting);
+        private final transient SequentialExecutionQueue queue =
+                new SequentialExecutionQueue(Jenkins.MasterComputer.threadPoolForRemoting);
         private boolean jobsMigrated = false;
         private boolean jobsMigrated2 = false;
+
+        @SuppressFBWarnings(value = "UWF_UNWRITTEN_FIELD", justification = "API compatibility")
         private String gitlabApiToken;
+
         private String gitlabHostUrl = "";
         private boolean ignoreCertificateErrors = false;
 
@@ -589,7 +653,8 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
             Job<?, ?> project = retrieveCurrentJob();
             if (project != null) {
                 try {
-                    return "Build when a change is pushed to GitLab. GitLab webhook URL: " + retrieveProjectUrl(project);
+                    return "Build when a change is pushed to GitLab. GitLab webhook URL: "
+                            + retrieveProjectUrl(project);
                 } catch (IllegalStateException e) {
                     // nothing to do
                 }
@@ -599,10 +664,11 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
 
         private StringBuilder retrieveProjectUrl(Job<?, ?> project) {
             return new StringBuilder()
-                    .append(Jenkins.getInstance().getRootUrl())
+                    .append(Objects.requireNonNull(Jenkins.getInstance()).getRootUrl())
                     .append(GitLabWebHook.WEBHOOK_URL)
                     .append(retrieveParentUrl(project))
-                    .append('/').append(Util.rawEncode(project.getName()));
+                    .append('/')
+                    .append(Util.rawEncode(project.getName()));
         }
 
         private StringBuilder retrieveParentUrl(Item item) {
@@ -629,52 +695,66 @@ public class GitLabPushTrigger extends Trigger<Job<?, ?>> implements MergeReques
             return super.configure(req, formData);
         }
 
-        public ListBoxModel doFillTriggerOpenMergeRequestOnPushItems(@QueryParameter String triggerOpenMergeRequestOnPush) {
-            return new ListBoxModel(new Option("Never", "never", triggerOpenMergeRequestOnPush.matches("never")),
+        public ListBoxModel doFillTriggerOpenMergeRequestOnPushItems(
+                @QueryParameter String triggerOpenMergeRequestOnPush) {
+            return new ListBoxModel(
+                    new Option("Never", "never", triggerOpenMergeRequestOnPush.matches("never")),
                     new Option("On push to source branch", "source", triggerOpenMergeRequestOnPush.matches("source")),
-                    new Option("On push to source or target branch", "both", triggerOpenMergeRequestOnPush.matches("both")));
+                    new Option(
+                            "On push to source or target branch",
+                            "both",
+                            triggerOpenMergeRequestOnPush.matches("both")));
         }
 
-        public AutoCompletionCandidates doAutoCompleteIncludeBranchesSpec(@AncestorInPath final Job<?, ?> job, @QueryParameter final String value) {
+        public AutoCompletionCandidates doAutoCompleteIncludeBranchesSpec(
+                @AncestorInPath final Job<?, ?> job, @QueryParameter final String value) {
             return ProjectBranchesProvider.instance().doAutoCompleteBranchesSpec(job, value);
         }
 
-        public AutoCompletionCandidates doAutoCompleteExcludeBranchesSpec(@AncestorInPath final Job<?, ?> job, @QueryParameter final String value) {
+        public AutoCompletionCandidates doAutoCompleteExcludeBranchesSpec(
+                @AncestorInPath final Job<?, ?> job, @QueryParameter final String value) {
             return ProjectBranchesProvider.instance().doAutoCompleteBranchesSpec(job, value);
         }
 
-        public FormValidation doCheckIncludeBranchesSpec(@AncestorInPath final Job<?, ?> project, @QueryParameter final String value) {
+        public FormValidation doCheckIncludeBranchesSpec(
+                @AncestorInPath final Job<?, ?> project, @QueryParameter final String value) {
             return ProjectBranchesProvider.instance().doCheckBranchesSpec(project, value);
         }
 
-        public FormValidation doCheckExcludeBranchesSpec(@AncestorInPath final Job<?, ?> project, @QueryParameter final String value) {
+        public FormValidation doCheckExcludeBranchesSpec(
+                @AncestorInPath final Job<?, ?> project, @QueryParameter final String value) {
             return ProjectBranchesProvider.instance().doCheckBranchesSpec(project, value);
         }
 
-        public AutoCompletionCandidates doAutoCompleteIncludeMergeRequestLabels(@AncestorInPath final Job<?, ?> job, @QueryParameter final String value) {
+        public AutoCompletionCandidates doAutoCompleteIncludeMergeRequestLabels(
+                @AncestorInPath final Job<?, ?> job, @QueryParameter final String value) {
             return ProjectLabelsProvider.instance().doAutoCompleteLabels(job, value);
         }
 
-        public AutoCompletionCandidates doAutoCompleteExcludeMergeRequestLabels(@AncestorInPath final Job<?, ?> job, @QueryParameter final String value) {
+        public AutoCompletionCandidates doAutoCompleteExcludeMergeRequestLabels(
+                @AncestorInPath final Job<?, ?> job, @QueryParameter final String value) {
             return ProjectLabelsProvider.instance().doAutoCompleteLabels(job, value);
         }
 
-        public FormValidation doCheckIncludeMergeRequestLabels(@AncestorInPath final Job<?, ?> project, @QueryParameter final String value) {
+        public FormValidation doCheckIncludeMergeRequestLabels(
+                @AncestorInPath final Job<?, ?> project, @QueryParameter final String value) {
             return ProjectLabelsProvider.instance().doCheckLabels(project, value);
         }
 
-        public FormValidation doCheckExcludeMergeRequestLabels(@AncestorInPath final Job<?, ?> project, @QueryParameter final String value) {
+        public FormValidation doCheckExcludeMergeRequestLabels(
+                @AncestorInPath final Job<?, ?> project, @QueryParameter final String value) {
             return ProjectLabelsProvider.instance().doCheckLabels(project, value);
         }
 
         public void doGenerateSecretToken(@AncestorInPath final Job<?, ?> project, StaplerResponse response) {
-            byte[] random = new byte[16];   // 16x8=128bit worth of randomness, since we use md5 digest as the API token
+            byte[] random = new byte[16]; // 16x8=128bit worth of randomness, since we use md5 digest as the API token
             RANDOM.nextBytes(random);
             String secretToken = Util.toHexString(random);
             response.setHeader("script", "document.getElementById('secretToken').value='" + secretToken + "'");
         }
 
-        public void doClearSecretToken(@AncestorInPath final Job<?, ?> project, StaplerResponse response) {;
+        public void doClearSecretToken(@AncestorInPath final Job<?, ?> project, StaplerResponse response) {
+            ;
             response.setHeader("script", "document.getElementById('secretToken').value=''");
         }
     }

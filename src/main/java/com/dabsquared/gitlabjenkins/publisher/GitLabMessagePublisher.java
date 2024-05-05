@@ -1,6 +1,5 @@
 package com.dabsquared.gitlabjenkins.publisher;
 
-
 import com.dabsquared.gitlabjenkins.gitlab.api.GitLabClient;
 import com.dabsquared.gitlabjenkins.gitlab.api.model.MergeRequest;
 import hudson.Extension;
@@ -11,17 +10,17 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Publisher;
-import jenkins.model.Jenkins;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.DataBoundSetter;
-
-import javax.ws.rs.ProcessingException;
-import javax.ws.rs.WebApplicationException;
 import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.ws.rs.ProcessingException;
+import javax.ws.rs.WebApplicationException;
+import jenkins.model.Jenkins;
+import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 
 /**
  * @author Nikolay Ustinov
@@ -51,8 +50,16 @@ public class GitLabMessagePublisher extends MergeRequestNotifier {
      * @param unstableNoteText Text of message for unstable build
      */
     @Deprecated
-    public GitLabMessagePublisher(boolean onlyForFailure, boolean replaceSuccessNote, boolean replaceFailureNote, boolean replaceAbortNote, boolean replaceUnstableNote,
-                                  String successNoteText, String failureNoteText, String abortNoteText, String unstableNoteText) {
+    public GitLabMessagePublisher(
+            boolean onlyForFailure,
+            boolean replaceSuccessNote,
+            boolean replaceFailureNote,
+            boolean replaceAbortNote,
+            boolean replaceUnstableNote,
+            String successNoteText,
+            String failureNoteText,
+            String abortNoteText,
+            String unstableNoteText) {
         this.onlyForFailure = onlyForFailure;
         this.replaceSuccessNote = replaceSuccessNote;
         this.replaceFailureNote = replaceFailureNote;
@@ -65,7 +72,7 @@ public class GitLabMessagePublisher extends MergeRequestNotifier {
     }
 
     @DataBoundConstructor
-    public GitLabMessagePublisher() { }
+    public GitLabMessagePublisher() {}
 
     public boolean isOnlyForFailure() {
         return onlyForFailure;
@@ -174,8 +181,15 @@ public class GitLabMessagePublisher extends MergeRequestNotifier {
                 client.createMergeRequestNote(mergeRequest, getNote(build, listener));
             }
         } catch (WebApplicationException | ProcessingException e) {
-            listener.getLogger().printf("Failed to add comment on Merge Request for project '%s': %s%n", mergeRequest.getProjectId(), e.getMessage());
-            LOGGER.log(Level.SEVERE, String.format("Failed to add comment on Merge Request for project '%s'", mergeRequest.getProjectId()), e);
+            listener.getLogger()
+                    .printf(
+                            "Failed to add comment on Merge Request for project '%s': %s%n",
+                            mergeRequest.getProjectId(), e.getMessage());
+            LOGGER.log(
+                    Level.SEVERE,
+                    String.format(
+                            "Failed to add comment on Merge Request for project '%s'", mergeRequest.getProjectId()),
+                    e);
         }
     }
 
@@ -232,9 +246,14 @@ public class GitLabMessagePublisher extends MergeRequestNotifier {
             message = replaceMacros(build, listener, this.getFailureNoteText());
         } else {
             String icon = getResultIcon(build.getResult());
-            String buildUrl = Jenkins.getInstance().getRootUrl() + build.getUrl();
-            message = MessageFormat.format("{0} Jenkins Build {1}\n\nResults available at: [Jenkins [{2} #{3}]]({4})",
-                                           icon, build.getResult().toString(), build.getParent().getDisplayName(), build.getNumber(), buildUrl);
+            String buildUrl = Objects.requireNonNull(Jenkins.getInstance()).getRootUrl() + build.getUrl();
+            message = MessageFormat.format(
+                    "{0} Jenkins Build {1}\n\nResults available at: [Jenkins [{2} #{3}]]({4})",
+                    icon,
+                    Objects.requireNonNull(build.getResult()).toString(),
+                    build.getParent().getDisplayName(),
+                    build.getNumber(),
+                    buildUrl);
         }
         return message;
     }
